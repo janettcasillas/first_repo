@@ -12,7 +12,7 @@ output:
 
 
 ```{r setup, include=FALSE}
-#knitr::opts_chunk$set(echo = TRUE, error=TRUE, message=FALSE, warning=FALSE)
+knitr::opts_chunk$set(echo = TRUE, error=TRUE, message=FALSE, warning=FALSE)
 ```
 
 ```{r libraries}
@@ -76,33 +76,63 @@ These exercises will reiterate what you learned in the "Expanding the data wrang
   1. Summarize the `garden_harvest` data to find the total harvest weight in pounds for each vegetable and day of week (HINT: use the `wday()` function from `lubridate`). Display the results so that the vegetables are rows but the days of the week are columns.
 
 ```{r}
-
+garden_harvest %>% 
+  group_by(date, vegetable) %>% 
+  summarize(daily_harvest_g = sum(weight)) %>% 
+  mutate(daily_harvest_lb = daily_harvest_g*0.00220462,
+         day_of_week = wday(date, label=TRUE)) %>% 
+  ggplot(aes(y = vegetable, x = day_of_week)) +
+  geom_col()
 ```
 
   2. Summarize the `garden_harvest` data to find the total harvest in pound for each vegetable variety and then try adding the plot from the `garden_planting` table. This will not turn out perfectly. What is the problem? How might you fix it?
+  
+  There are a lot of values of NA for the plot the harvest is from, as well as the number of seeds planted. Therefore, it does not provide the most clear information in regards to where the vegetables came from, and how many seeds were necessary/planted in order to get that harvest. 
 
 ```{r}
-
+garden_harvest %>% 
+  group_by(vegetable, variety) %>% 
+  summarize(tot_wt_lbs = sum(weight) * 0.0022046) %>% 
+  left_join(garden_planting, 
+            by = c("vegetable","variety"))
 ```
 
   3. I would like to understand how much money I "saved" by gardening, for each vegetable type. Describe how I could use the `garden_harvest` and `garden_spending` datasets, along with data from somewhere like [this](https://products.wholefoodsmarket.com/search?sort=relevance&store=10542) to answer this question. You can answer this in words, referencing various join functions. You don't need R code but could provide some if it's helpful.
 
+One could use the garden_harvest dataset to look at how much was produced, and then look at the garden_spending to see how much it would have cost to buy the same amount of produce. Since the data was collected by weight, one could look up the weight per purchase unit (weight of an apple or weight of a bundle of basil, etc), and then divide the total harvest by that.
+
   4. Subset the data to tomatoes. Reorder the tomato varieties from smallest to largest first harvest date. Create a barplot of total harvest in pounds for each variety, in the new order.
 
 ```{r}
-
+garden_harvest %>% 
+  filter(vegetable%in%"tomatoes") %>% 
+  group_by(variety, date) %>% 
+  summarize(daily_harvest_g = sum(weight)) %>% 
+  mutate(daily_harvest_lb = daily_harvest_g*0.00220462,
+         day_of_week = wday(date, label=TRUE)) %>% 
+  ggplot(aes(y=fct_rev(fct_infreq(variety)))) + 
+  geom_bar()
 ```
 
   5. In the `garden_harvest` data, create two new variables: one that makes the varieties lowercase and another that finds the length of the variety name. Arrange the data by vegetable and length of variety name (smallest to largest), with one row for each vegetable variety. HINT: use `str_to_lower()`, `str_length()`, and `distinct()`.
   
 ```{r}
-
+garden_harvest %>% 
+  filter(vegetable%in%"tomatoes") %>% 
+  mutate(lower_case_var = str_to_lower(variety),
+         chr_length_var = str_length(variety)) %>% 
+  arrange(chr_length_var) %>% 
+  distinct(variety, lower_case_var, chr_length_var)
 ```
 
   6. In the `garden_harvest` data, find all distinct vegetable varieties that have "er" or "ar" in their name. HINT: `str_detect()` with an "or" statement (use the | for "or") and `distinct()`.
-
+  
 ```{r}
-
+garden_harvest %>% 
+  select(vegetable, variety) %>% 
+  mutate(lower_case_var = str_to_lower(variety)) %>% 
+  filter(str_detect(lower_case_var, "er") | str_detect(lower_case_var, "ar")) %>% 
+  distinct(lower_case_var)
 ```
 
 
@@ -142,25 +172,40 @@ It's natural to expect that bikes are rented more at some times of day, some day
   7. A density plot, which is a smoothed out histogram, of the events versus `sdate`. Use `geom_density()`.
   
 ```{r}
-
+Trips %>% 
+  ggplot(aes(x = sdate)) +
+  geom_density()
 ```
   
   8. A density plot of the events versus time of day.  You can use `mutate()` with `lubridate`'s  `hour()` and `minute()` functions to extract the hour of the day and minute within the hour from `sdate`. Hint: A minute is 1/60 of an hour, so create a variable where 3:30 is 3.5 and 3:45 is 3.75.
   
 ```{r}
-
+Trips %>% 
+  mutate(hour_and_minute = hour(sdate) + 1/60*minute(sdate)) %>% 
+  ggplot(aes(x = hour_and_minute)) +
+  geom_density()
 ```
   
   9. A bar graph of the events versus day of the week. Put day on the y-axis.
   
 ```{r}
-
+Trips %>% 
+    mutate(day_of_week = wday(sdate, label=TRUE)) %>% 
+  ggplot(aes(y = day_of_week)) + 
+  geom_bar()
 ```
   
   10. Facet your graph from exercise 8. by day of the week. Is there a pattern?
   
+  Based on this, there definitely is a pattern. It seems that the bikes tend to be used more throughout the day on weekends, whereas on weekdays they are mainly around the beginning and end of the average workday. 
+  
 ```{r}
-
+Trips %>% 
+  mutate(hour_and_minute = hour(sdate) + 1/60*minute(sdate), 
+         day_of_week = wday(sdate, label=TRUE)) %>% 
+  ggplot(aes(x = hour_and_minute)) +
+  geom_density() +
+  facet_wrap(vars(day_of_week))
 ```
   
 The variable `client` describes whether the renter is a regular user (level `Registered`) or has not joined the bike-rental organization (`Causal`). The next set of exercises investigate whether these two different categories of users show different rental behavior and how `client` interacts with the patterns you found in the previous exercises. 
@@ -168,25 +213,49 @@ The variable `client` describes whether the renter is a regular user (level `Reg
   11. Change the graph from exercise 10 to set the `fill` aesthetic for `geom_density()` to the `client` variable. You should also set `alpha = .5` for transparency and `color=NA` to suppress the outline of the density function.
   
 ```{r}
-
+Trips %>% 
+  mutate(hour_and_minute = hour(sdate) + 1/60*minute(sdate), 
+         day_of_week = wday(sdate, label=TRUE)) %>% 
+  ggplot(aes(x = hour_and_minute, fill = client, alpha = .5)) +
+  geom_density(color = NA) +
+  facet_wrap(vars(day_of_week))
 ```
 
   12. Change the previous graph by adding the argument `position = position_stack()` to `geom_density()`. In your opinion, is this better or worse in terms of telling a story? What are the advantages/disadvantages of each?
   
+  I think the previous form is the best way to tell the story. As the FDV textbook mentioned, without using transparency and simply stacking one color above the other, it can be difficult for the reader to tell where the stacked variable begins.  
+  
 ```{r}
-
+Trips %>% 
+  mutate(hour_and_minute = hour(sdate) + 1/60*minute(sdate), 
+         day_of_week = wday(sdate, label=TRUE)) %>% 
+  ggplot(aes(x = hour_and_minute, fill = client, alpha = .5)) +
+  geom_density(color = NA, position = position_stack()) +
+  facet_wrap(vars(day_of_week))
 ```
   
   13. In this graph, go back to using the regular density plot (without `position = position_stack()`). Add a new variable to the dataset called `weekend` which will be "weekend" if the day is Saturday or Sunday and  "weekday" otherwise (HINT: use the `ifelse()` function and the `wday()` function from `lubridate`). Then, update the graph from the previous problem by faceting on the new `weekend` variable. 
   
 ```{r}
-
+Trips %>% 
+  mutate(hour_and_minute = hour(sdate) + 1/60*minute(sdate), 
+         day_of_week = wday(sdate, label=TRUE),
+         weekend = ifelse(wday(sdate) == "Saturday" | wday(sdate) == "Sunday", "weekend", "weekday")) %>% 
+  ggplot(aes(x = hour_and_minute, fill = client, alpha = .5)) +
+  geom_density(color = NA) +
+  facet_wrap(vars(weekend))
 ```
   
   14. Change the graph from the previous problem to facet on `client` and fill with `weekday`. What information does this graph tell you that the previous didn't? Is one graph better than the other?
   
 ```{r}
-
+Trips %>% 
+  mutate(hour_and_minute = hour(sdate) + 1/60*minute(sdate), 
+         day_of_week = wday(sdate, label=TRUE),
+         weekend = ifelse(wday(sdate) == "Saturday" | wday(sdate) == "Sunday", "weekend", "weekday")) %>% 
+  ggplot(aes(x = hour_and_minute, fill = weekend, alpha = .5)) +
+  geom_density(color = NA) +
+  facet_wrap(vars(client))
 ```
   
 ### Spatial patterns
@@ -194,30 +263,82 @@ The variable `client` describes whether the renter is a regular user (level `Reg
   15. Use the latitude and longitude variables in `Stations` to make a visualization of the total number of departures from each station in the `Trips` data. Use either color or size to show the variation in number of departures. We will improve this plot next week when we learn about maps!
   
 ```{r}
-
+Stations %>% 
+  inner_join(Trips, by= c("name" = "sstation")) %>% 
+  ggplot(aes(x = lat, y = long)) + 
+  geom_count()
+  
+  
 ```
   
   16. Only 14.4% of the trips in our data are carried out by casual users. Create a plot that shows which area(s) have stations with a much higher percentage of departures by casual users. What patterns do you notice? (Again, we'll improve this next week when we learn about maps).
   
 ```{r}
-
+casual_counts = Trips %>% 
+  count(sstation, client) %>% 
+  filter(client == "Casual")
+tot_counts = Trips %>% 
+  count(sstation) %>% 
+  inner_join(casual_counts, tot_counts, by= "sstation") %>% 
+  mutate(percent_casual = (n.y / n.x)) %>% 
+  inner_join(Stations, by = c("sstation" = "name"))
+tot_counts %>% 
+  ggplot(aes(x = lat, y = long, color = percent_casual)) + 
+  geom_count()
 ```
+  
   
 ### Spatiotemporal patterns
 
   17. Make a table with the ten station-date combinations (e.g., 14th & V St., 2014-10-14) with the highest number of departures, sorted from most departures to fewest. Save this to a new dataset and print out the dataset. Hint: `as_date(sdate)` converts `sdate` from date-time format to date format. 
   
 ```{r}
-
+Trips %>% 
+  mutate(fixed_date = as_date(sdate)) %>% 
+  count(fixed_date, sstation) %>% 
+  arrange(desc(n)) %>% 
+  slice_head(n = 10)
+  
+  
 ```
   
   18. Use a join operation to make a table with only those trips whose departures match those top ten station-date combinations from the previous part.
   
 ```{r}
+top_station_dates= Trips %>% 
+  mutate(fixed_date = as_date(sdate)) %>% 
+  count(fixed_date, sstation) %>% 
+  arrange(desc(n)) %>% 
+  slice_head(n = 10)
+Trips %>% 
+  mutate(fixed_date = as_date(sdate)) %>% 
+  inner_join(top_station_dates, fixed_date, by = c("sstation","fixed_date"))
 
 ```
   
   19. Build on the code from the previous problem (ie. copy that code below and then %>% into the next step.) and group the trips by client type and day of the week (use the name, not the number). Find the proportion of trips by day within each client type (ie. the proportions for all 7 days within each client type add up to 1). Display your results so day of week is a column and there is a column for each client type. Interpret your results.
+  
+  As shown, casual users tend to take trips during the weekend when people have more free time, while registered users take trips more so during the week, which could indicate that they are using them for their commutes. 
+
+```{r}
+top_station_dates= Trips %>% 
+  mutate(fixed_date = as_date(sdate)) %>% 
+  count(fixed_date, sstation) %>% 
+  arrange(desc(n)) %>% 
+  slice_head(n = 10)
+Trips %>% 
+  mutate(fixed_date = as_date(sdate)) %>% 
+  inner_join(top_station_dates, fixed_date, by = c("sstation","fixed_date")) %>% 
+  mutate(day_of_week = wday(fixed_date, label = TRUE)) %>% 
+  group_by(client, day_of_week) %>% 
+  count(client, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = n, fill  = client)) +
+  geom_col(position = "dodge")
+```
+
+
+
+
 
 **DID YOU REMEMBER TO GO BACK AND CHANGE THIS SET OF EXERCISES TO THE LARGER DATASET? IF NOT, DO THAT NOW.**
 
@@ -231,6 +352,6 @@ This problem uses the data from the Tidy Tuesday competition this week, `kids`. 
 
   21. In this exercise, you are going to try to replicate the graph below, created by Georgios Karamanis. I'm sure you can find the exact code on GitHub somewhere, but **DON'T DO THAT!** You will only be graded for putting an effort into this problem. So, give it a try and see how far you can get without doing too much googling. HINT: use `facet_geo()`. The graphic won't load below since it came from a location on my computer. So, you'll have to reference the original html on the moodle page to see it.
   
-![](kids_data_karamanis.jpeg)
+
 
 **DID YOU REMEMBER TO UNCOMMENT THE OPTIONS AT THE TOP?**
